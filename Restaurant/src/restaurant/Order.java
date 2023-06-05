@@ -12,6 +12,7 @@ public class Order implements Comparable<Order>, Serializable{
     private int waiterNumber;
     private LocalTime orderedTime;
     private LocalTime fulfilmentTime;
+    String note;
     
     public Order(int table, Dish dish, int amount, int waiterNumber){
         this.table = table;
@@ -47,6 +48,12 @@ public class Order implements Comparable<Order>, Serializable{
     }
     public LocalTime getExpectedFulfilmentTime(){
         return orderedTime.plusMinutes(dish.getPreparationTime());
+    }
+    public String getNote() {
+        return note;
+    }
+    public void setNote(String note) {
+        this.note = note;
     }
     @Override
     public int compareTo(Order o) {

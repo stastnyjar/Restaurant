@@ -8,6 +8,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.math.BigDecimal;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,10 +18,11 @@ import java.util.HashSet;
 public class Restaurant {
     private static ArrayList<Dish> dishList;
     private static ArrayList<Dish> menu;
-    private static ArrayList<Table> tables;
+    private static ArrayList<Order> pendingOrders;
     private static ArrayList<Order> fulfiledOrders;
     private static ArrayList<String> notes;
 
+    
     public static void addToDishList(Dish dish){
         dishList.add(dish);
     }
@@ -40,13 +42,6 @@ public class Restaurant {
     public static void removeFromMenu(Dish dish){
         menu.remove(dish);
     }
-    public static void addPhoto(String filename, Dish dish) throws DishException{
-        if(dishList.contains(dish)){
-            dish.addFileName(filename);
-        }else{
-            throw new DishException("Toto jídlo není v repertoáru.");
-        }
-    }
     public static void clearMenu(){
         menu.clear();
     }
@@ -56,36 +51,16 @@ public class Restaurant {
     public static void addFulfiledOrder(Order order){
         fulfiledOrders.add(order);
     }
-    public static void addNote(String note){
-        notes.add(note);
-    }
     public static int getPendingOrdersNumber(){
-        return getAllPendingOrders().size();
-    }
-    public static ArrayList<Order> getAllPendingOrders(){
-        ArrayList<Order> allOrders = new ArrayList<>();
-        for(Table t: tables){
-            allOrders.addAll(t.getPendingOrders());
-        }
-        return allOrders;
-    }
-    public static ArrayList<Order> getAllCurrentOrders(){
-        ArrayList<Order> allOrders = new ArrayList<>();
-        for(Table t: tables){
-            allOrders.addAll(t.getPendingOrders());
-            allOrders.addAll(t.getFulfiledOrders());
-        }
-        return allOrders;
+        return pendingOrders.size();
     }
     public static ArrayList<Order> sortOrdersByWaiter(){
-        ArrayList<Order> allOrders = getAllPendingOrders();
-        Collections.sort(allOrders);
-        return allOrders;
+        Collections.sort(pendingOrders);
+        return pendingOrders;
     }
     public static ArrayList<Order> sortOrdersByTime(){
-        ArrayList<Order> allOrders = getAllPendingOrders();
-        Collections.sort(allOrders, new OrderTimeComparator());
-        return allOrders;
+        Collections.sort(pendingOrders, new OrderTimeComparator());
+        return pendingOrders;
     }
     public static double getAverageFulfilmentTime(LocalTime from, LocalTime to){
         int orders = 0;
@@ -94,13 +69,32 @@ public class Restaurant {
             for(Order order: fulfiledOrders){
                 if(order.getOrderedTime().isAfter(from) && order.getFulfilmentTime().isBefore(to)){
                     orders++;
-                    int time = (int)order.getOrderedTime().until(to, ChronoUnit.SECONDS);
+                    int time = (int)order.getOrderedTime().until(order.getFulfilmentTime(), ChronoUnit.SECONDS);
                     sum += time;
                 }
             }
             return sum/orders;
         }catch(Exception e){//pro případ, že si tento den ještě nikdo nic neobjednal (dělení nulou)
             return 0;
+        }
+    }
+    public static void order(Dish dish, int table, int amount, int waiterNumber) throws DishException{
+        if(Restaurant.isOnMenu(dish)){
+            pendingOrders.add(new Order(table, dish, amount, waiterNumber));
+        }else{
+            throw new DishException("Toto jídlo není v menu.");
+        }
+    }
+    public static void finishOrder(Order order){
+        if(pendingOrders.contains(order)){
+            order.deliver();
+            pendingOrders.remove(order);
+            fulfiledOrders.add(order);
+        }
+    }
+    public static void cancelOrder(Order order){
+        if(pendingOrders.contains(order)){
+            pendingOrders.remove(order);
         }
     }
     public static HashSet<Dish> getTodaysDishes(){
@@ -110,6 +104,40 @@ public class Restaurant {
         }
         return dishes;
     }
+    public static void writeOutOrders(int tableNumber){
+        System.out.println("** Objednávky pro stůl č. " + tableNumber + " **");
+        System.out.println("****");
+        int orderNumber = 1;
+        for(Order order: fulfiledOrders){
+            if(order.getTable() == tableNumber){
+                System.out.println(orderNumber + ". " + order.getDish().getTitle() + " " + order.getAmount() + "x (" + order.getPrice() + 
+                        " Kč):\t" + order.getOrderedTime().format(DateTimeFormatter.ofPattern("hh:mm")) + "-" +
+                        order.getFulfilmentTime().format(DateTimeFormatter.ofPattern("hh:mm")) + "\t" + "číšník č. " + order.getWaiterNumber());
+            }
+        }
+    }
+    public static void getOrdersPerWaiters(int waiters){
+        for(int i = 1; i<=waiters; i++){
+            int pending = 0;
+            int fulfiled = 0;
+            BigDecimal total = BigDecimal.ZERO;
+            for(Order order: pendingOrders){
+                if(order.getWaiterNumber() == i){
+                    pending++;
+                    total = total.add(order.getPrice());
+                }
+            }
+            for(Order order: fulfiledOrders){
+                if(order.getWaiterNumber() == i){
+                    fulfiled++;
+                    total = total.add(order.getPrice());
+                }
+            }
+            if(!total.equals(BigDecimal.ZERO)){
+                System.out.println("Číšník " + i + ": " + total + " Kč (" + (pending+fulfiled) + " objednávek, z toho " + fulfiled + " dokončených.");
+            }   
+        }
+    }
     public static void saveData(){
         try{
             //pouze dočasný adresář, v praxi bude změněn na adresář na serveru
@@ -117,12 +145,12 @@ public class Restaurant {
             ObjectOutputStream oos = new ObjectOutputStream(fos);
             oos.writeObject(dishList);
             oos.writeObject(menu);
-            oos.writeObject(tables);
+            oos.writeObject(pendingOrders);
             oos.writeObject(fulfiledOrders);
             oos.writeObject(notes);
             oos.close();
         }catch(Exception ex){
-            System.err.println("Ukládání selhalo");
+            System.err.println(ex.getMessage());
         }
     }
     public static void loadData(){
@@ -131,12 +159,12 @@ public class Restaurant {
             ObjectInputStream ois = new ObjectInputStream(fis);
             dishList = ((ArrayList<Dish>)ois.readObject());
             menu = ((ArrayList<Dish>) ois.readObject());
-            tables = ((ArrayList<Table>)ois.readObject());
+            pendingOrders = ((ArrayList<Order>)ois.readObject());
             fulfiledOrders = ((ArrayList<Order>)ois.readObject());
             notes = ((ArrayList<String>)ois.readObject());
             ois.close();
         }catch(Exception ex){
-            System.err.println("Načítání selhalo");
+            System.err.println(ex.getMessage());
         }
     }
     public static void clearData(){
@@ -144,20 +172,15 @@ public class Restaurant {
             File file = new File("C:\\Users\\jstas\\OneDrive\\Dokumenty\\restaurace.txt");
             file.delete();
         }catch(Exception ex){
-            System.err.println("Soubor nebyl nalezen.");
+            System.err.println(ex.getMessage());
         }
     }
     public static void main(String[] args) {
         dishList = new ArrayList<>();
         menu = new ArrayList<>();
-        tables = new ArrayList<>();
+        pendingOrders = new ArrayList<>();
         fulfiledOrders = new ArrayList<>();
         notes = new ArrayList<>();
-        for(int i = 0; i<16; i++){
-            /*stůl 0 není myšlen k používání a ve frontendu nebude přístupný, slouží pouze k tomu, aby
-            indexy stolů v seznamu odpovídaly jejich číslům*/
-            tables.add(new Table(i));
-        }
         loadData();
         dishList.add(new Dish("Kuřecí řízek obalovaný 150 g", BigDecimal.valueOf(145), 15));
         dishList.add(new Dish("Hranolky 150 g", BigDecimal.valueOf(45), 10));
@@ -171,11 +194,11 @@ public class Restaurant {
         menu.add(dishList.get(4));
         menu.add(dishList.get(5));
         try{
-            tables.get(15).order(menu.get(2), 2, 3);
-            tables.get(15).order(menu.get(0), 1, 1);
-            tables.get(15).order(menu.get(1), 1, 1);
-            tables.get(2).order(menu.get(1), 1, 2);
-            tables.get(2).order(menu.get(4), 1, 2);
+            order(menu.get(2), 15, 2, 3);
+            order(menu.get(0), 15, 1, 1);
+            order(menu.get(1), 15, 1, 1);
+            order(menu.get(1), 2, 1, 2);
+            order(menu.get(4), 2, 1, 2);
         }catch(DishException e){
             System.err.println(e.getMessage());
         }
@@ -184,6 +207,9 @@ public class Restaurant {
         for(Order o: sortOrdersByWaiter()){
             System.out.println(o.getDish().getTitle() + ", objednáno u stolu " + o.getTable());
         }
+        writeOutOrders(2);
+        writeOutOrders(15);
+        getOrdersPerWaiters(3);
         saveData();
     }
 }
