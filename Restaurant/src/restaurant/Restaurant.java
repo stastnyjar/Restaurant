@@ -54,11 +54,11 @@ public class Restaurant {
     public static int getPendingOrdersNumber(){
         return pendingOrders.size();
     }
-    public static ArrayList<Order> sortOrdersByWaiter(){
+    public static ArrayList<Order> sortOrdersByTime(){
         Collections.sort(pendingOrders);
         return pendingOrders;
     }
-    public static ArrayList<Order> sortOrdersByTime(){
+    public static ArrayList<Order> sortOrdersByWaiter(){
         Collections.sort(pendingOrders, new OrderTimeComparator());
         return pendingOrders;
     }
@@ -141,7 +141,7 @@ public class Restaurant {
     public static void saveData(){
         try{
             //pouze dočasný adresář, v praxi bude změněn na adresář na serveru
-            FileOutputStream fos = new FileOutputStream("C:\\Users\\jstas\\OneDrive\\Dokumenty\\restaurace.txt");
+            FileOutputStream fos = new FileOutputStream(new File("restaurace.txt"));
             ObjectOutputStream oos = new ObjectOutputStream(fos);
             oos.writeObject(dishList);
             oos.writeObject(menu);
@@ -155,7 +155,7 @@ public class Restaurant {
     }
     public static void loadData(){
         try{
-            FileInputStream fis = new FileInputStream("C:\\Users\\jstas\\OneDrive\\Dokumenty\\restaurace.txt");
+            FileInputStream fis = new FileInputStream(new File("restaurace.txt"));
             ObjectInputStream ois = new ObjectInputStream(fis);
             dishList = ((ArrayList<Dish>)ois.readObject());
             menu = ((ArrayList<Dish>) ois.readObject());
@@ -169,7 +169,7 @@ public class Restaurant {
     }
     public static void clearData(){
         try{
-            File file = new File("C:\\Users\\jstas\\OneDrive\\Dokumenty\\restaurace.txt");
+            File file = new File("restaurace.txt");
             file.delete();
         }catch(Exception ex){
             System.err.println(ex.getMessage());

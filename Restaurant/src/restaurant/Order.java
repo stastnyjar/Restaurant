@@ -56,7 +56,7 @@ public class Order implements Comparable<Order>, Serializable{
         this.note = note;
     }
     @Override
-    public int compareTo(Order o) {
-        return Integer.valueOf(this.waiterNumber).compareTo(Integer.valueOf(o.getWaiterNumber()));
+    public int compareTo(Order order) {
+        return this.getOrderedTime().compareTo(order.getOrderedTime());
     }
 }
